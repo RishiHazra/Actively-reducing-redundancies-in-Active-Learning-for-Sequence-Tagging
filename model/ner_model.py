@@ -569,18 +569,3 @@ class NERModel(BaseModel):
         print(scores,'\n')
         '''
         # return preds
-
-#TODO : consider the dev split as an additional train split
-#TODO : add skipthoughts similarity
-#TODO : add outlier detection
-#TODO : make dense siamese twins                                : DONE
-#TODO : add a function for plotting graphs
-#TODO : add BALD active learning strategy
-#TODO : try to replicate the AWS AL strategy
-#TODO : should the margin based method be normalized ???
-#TODO : add POS tagging
-#TODO : add OntoNotes dataset
-#TODO : run all of them for 5,8,10 splits
-#TODO : change encoding to last state of word-BiLSTM            : DONE
-#TODO : extend to medical datasets
-#TODO : perform experiments with and without outlier detection
