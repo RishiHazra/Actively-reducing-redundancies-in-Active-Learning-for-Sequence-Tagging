@@ -74,9 +74,9 @@ def main():
     model.build()
     model.restore_session(config.dir_model)
 
-    # -----------------------------------------------------
-    # create dataset
-    # -----------------------------------------------------
+    # --------------------------------------------------------------
+    # create dataset (test for evaluation & dev for active learning)
+    # --------------------------------------------------------------
     test  = CoNLLDataset(config.filename_test, config.processing_word,
                          config.processing_tag, config.max_iter)
     dev = CoNLLDataset(config.train_split[config.sample_split], config.processing_word,
@@ -87,7 +87,7 @@ def main():
 
     # -----------------------------------------------------
     # encode SICK dataset using pretrained NER model
-    ##-----------------------------------------------------
+    #------------------------------------------------------
     if config.encode:
         model.get_encoded(sick)
 

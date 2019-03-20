@@ -4,7 +4,6 @@ import math
 import random
 import collections
 from itertools import combinations
-from sklearn.cluster import KMeans
 from sklearn.cluster import SpectralClustering
 import tensorflow as tf
 
@@ -14,22 +13,28 @@ class Siamese_Model():
     def __init__(self, session):
         self.sess = session
 
-        self.saver = tf.train.import_meta_graph(config.dir_model_similarity
+        self.saver1 = tf.train.import_meta_graph(config.dir_model_similarity
                                            + '/siamese_model.meta')
-        self.saver.restore(self.sess, config.dir_model_similarity
-                                           + '/siamese_model')
         self.siamese_graph = tf.get_default_graph()
-        self.distance = self.siamese_graph.get_tensor_by_name('output/distance:0')
+        self.saver1.restore(self.sess, config.dir_model_similarity
+                                           + '/siamese_model')
 
-    def run(self, x1_batch, x2_batch, seq_len, max_len):
+        self.output1 = self.siamese_graph.get_tensor_by_name('output/out1:0')
+        self.output2 = self.siamese_graph.get_tensor_by_name('output/out2:0')
+
+    def run(self, x1_batch, x2_batch, seq_len1, seq_len2, max_len, batch_size, len2):
         feed_dict = {
             'input_x1:0': x1_batch,
             'input_x2:0': x2_batch,
-            'seq_len:0': seq_len,
+            'seq_len1:0': seq_len1,
+            'seq_len2:0': seq_len2,
             'max_seq_len:0': max_len,
-            'dropout_keep_prob:0': 1
+            'dropout_keep_prob:0': 1,
+            'batch_size_dynamic:0': batch_size,
         }
-        return self.sess.run(self.distance, feed_dict=feed_dict)
+        out1, out2 = self.sess.run([self.output1, self.output2],
+                             feed_dict=feed_dict)
+        return out1, out2[:len2]
 
 #----------------------------------------------------------------------
 # Active Learning : Layer 1 (retains the most confused examples)
@@ -48,6 +53,7 @@ class Active_Learning():
         score: A [seq_len, num_tags] matrix of unary potentials.
         transition_params: A [num_tags, num_tags] matrix of binary potentials.
         """
+
         if self.active_algo == "cluster":
             # print('score: ',score)
             return score
@@ -115,7 +121,7 @@ class Active_Learning():
         return score_final
 
 
-    def feedback(self, AL_file, newSamples, ind_confused, PROB, enc, seq_len, session):
+    def feedback(self, AL_file, newSamples, dummy_train, words_conf, tags_conf, prob, enc, seq_len):
         '''
         feeds back data from validation set to retrain
         set in a self-training (active learning) setup
@@ -128,13 +134,12 @@ class Active_Learning():
         newSamples : writing the most representative samples
                     to a different file for re-trainings.
         '''
-        print('Clustering to find similarity')
-        clusters= self.cluster_sentences(np.array(enc), seq_len, config.nclusters, session)
+        print('\nClustering to find similarity \n')
+        clusters= self.cluster_sentences(enc, seq_len)
 
         most_representative_index = []
         for cluster in range(config.nclusters):
-            #ind = i[random.choice(clusters[cluster])]
-            clust = list(map(lambda x: ind_confused[x], clusters[cluster]))
+            clust = clusters[cluster]
 
             # ----------------------------------------------------------------
             # Select the top two lowest confidence sentences from each cluster.
@@ -143,51 +148,45 @@ class Active_Learning():
             # considered as outliers and dropped.
             #-----------------------------------------------------------------
             most_representative_index += \
-                [x for _,x in sorted(zip(list(map(lambda x:PROB[x],clust)),clust))][:2]
+                [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:2]
 
         index = sorted(most_representative_index )
-        curr_line = None
-
-
-        with open(newSamples, 'a') as feedback:
-            for ind in index:
-                j = 0
-                fin = open(AL_file, 'r')
-                for line in fin.readlines()[:-1]:
-                    line = line.strip()
-
-                    if line == '' or curr_line == '':
-                        if curr_line != line: j += 1
-                    curr_line = line
-                    if j == 2 * (ind - 1):
-                        if len(line) > 1:
-                            feedback.write(line)
-                            feedback.write('\n')
-                        else:
-                            continue
-                    if j > 2 * (ind - 1) and j < 2 * (ind): feedback.write('\n')
+        with open(newSamples, 'a') as handle1, \
+            open(dummy_train, 'a') as handle2:
+            for words, tags in zip(np.array(words_conf)[index], np.array(tags_conf)[index]):
+                [handle1.write(word + ' ' + tag + '\n')
+                        for word, tag in zip(words, tags) if word not in ['$UNK$', '$NUM$']]
+                handle1.write('\n\n')
+                [handle2.write(word + ' ' + tag + '\n')
+                        for word, tag in zip(words, tags) if word not in ['$UNK$', '$NUM$']]
+                handle2.write('\n\n')
 
         print('sentences fedback : ', len(index))
+        return len(index)
 
 
-    def random_sampling(self, x, train_file, newSamples, retrain_file):
+    def random_sampling(self, train_file, newSamples, retrain_file, num_fedback):
         '''
-        mixed samples from train data and the feedback samples (40 batches out of 250)
+        mixed samples from train data and the feedback samples
         function performs : mixed sampling for incremental training
 
         retrain_file : all mixed samples are written to the retrain file
         '''
         split_size = math.ceil(14986 / config.num_splits) # train_size = 14986
-        a = random.sample(range(split_size), 1600)
-        b = list(range(40*x,40*(x+1)))
-        if x!=0:
-            b += list(random.sample(range(40*(x)), 280))
 
-        def write(samples, filename, text):
+        #--------------------------------------------------------------------------------------
+        # keeping a fixed proportion of samples from both train file and low confidence samples
+        # num_fedback : total samples fedback from all active learning rounds
+        #--------------------------------------------------------------------------------------
+        train_samples = random.sample(range(split_size), config.sample_train)
+        confused_samples = list(random.sample(range(int(num_fedback)),
+                                              min(int(num_fedback * 0.5), config.sample_train)))
+
+        def write(samples, filename, text, type):
             j = 0
             curr_line = None
             file = open(filename, 'r')
-            with open(retrain_file, 'w') as sp:
+            with open(retrain_file, type) as sp:
                 print('\n Writing {} {} to retrain file...\n'.format(len(samples), text))
                 for line in file.readlines():
                     line = line.strip()
@@ -199,46 +198,78 @@ class Active_Learning():
         #--------------------------------------------------
         #  writing feedback samples to corresponding files
         #--------------------------------------------------
-        write(b, newSamples, 'low confidence sentences')
-        write(a, train_file, 'new samples from train')
+        write(confused_samples, newSamples, 'low confidence sentences', 'w')
+        write(train_samples, train_file, 'new samples from train', 'a')
 
 
+    def spectral_clustering(self, X, nclusters):
+        #--------------------------------------------------------------
+        # performs spectral clustering on predefined distance matrix X
+        #-------------------------------------------------------------
+        print('======Clustering======')
+        clustering = SpectralClustering(n_clusters=nclusters, random_state=0, affinity='precomputed').fit(X)
+        clusters = collections.defaultdict(list)
 
-    def cluster_sentences(self, enc, seq_len, n_clusters, session):
-        kmeans = KMeans(n_clusters=n_clusters)
+        for idx, label in enumerate(clustering.labels_):
+            clusters[label].append(idx)
+        return clusters
 
+
+    def cluster_sentences(self, enc, seq_len):
+        # ------------------------------------------------------------
+        # dynamic clustering depending on num low confidence samples
+        # ------------------------------------------------------------
+        n_clusters = int(len(seq_len) / config.num_clusters)
+
+        print('\nSimilarity metric is {}\n'.format(config.similarity))
         if config.similarity == 'siamese':
-            max_len = max(seq_len)
-            X = np.zeros((len(seq_len), len(seq_len)))
 
-            print("\n Reloading the sentence similarity model...")
-            siamese = Siamese_Model(session)
+            print("\nReloading the sentence similarity model...\n")
+            graph = tf.Graph()
+            with graph.as_default():
+                sess = tf.Session()
+                siamese = Siamese_Model(sess)
 
             #---------------------------------------------------
-            # take all possible pairwisecombinations of confused
+            # take all possible pairwise combinations of confused
             # samples to obtain the similarity scores pairwise.
 
             # The similarity matrix is symmetric.
             #---------------------------------------------------
-            ind_comb = list(combinations(range(len(seq_len)), 2))
 
-            for ind1, ind2 in ind_comb:
-                sent1, sent2 = enc[ind1], enc[ind2]
-                X[ind1, ind2] = X[ind2, ind1] = \
-                     siamese.run(sent1, sent2, seq_len, max_len)
+            split1, split2 = np.array_split(np.arange(len(seq_len)),2)
+            max_len = max(seq_len)
+            seq_len1, seq_len2 = \
+                [seq_len[i] for i in split1], [seq_len[i] for i in split2]
+            sent1, sent2 = [enc[i] for i in split1], [enc[i] for i in split2]
 
-            np.fill_diagonal(X, 1)
-            kmeans.fit(X)
+            for i, row in enumerate(sent1):
+                if len(row) <= max_len:
+                    sent1[i] += [np.zeros(600).tolist()] * (max_len - len(row))
+                    try:
+                        sent2[i] += [np.zeros(600).tolist()] * (max_len - len(sent2[i]))
+                    except IndexError:
+                        sent2 += [[np.zeros(600).tolist()] * len(sent1[i])]
+                        seq_len2 += [1]
+
+            siamese_enc = np.concatenate(siamese.run(sent1, sent2, seq_len1, seq_len2,
+                                                     max_len, len(split1), len(split2)))
+
+            def similarity_scores(enc):
+                shape = np.array(enc).shape
+                out = np.reshape(np.repeat(enc, [shape[0]], axis=0), (-1,shape[0],shape[1]))
+                X = np.exp(-1 * np.sqrt(np.sum(
+                    np.square(out - np.transpose(out, (1,0,2))), 2, keepdims=False)))
+                return X
+
+            X = similarity_scores(siamese_enc)
+            clustering = self.spectral_clustering(X, n_clusters)
 
         elif config.similarity == 'cosine':
             sents = enc / np.linalg.norm(enc)
             X = np.cos(np.matmul(sents, np.transpose(sents)))
             _, eigen_vectors = np.linalg.eigh(X)
-            kmeans.fit(eigen_vectors)
-
-        clustering = collections.defaultdict(list)
-        for idx, label in enumerate(kmeans.labels_):
-            clustering[label].append(idx)
+            clustering = self.spectral_clustering(eigen_vectors, n_clusters)
 
         return clustering
 

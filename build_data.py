@@ -18,15 +18,18 @@ def split_train(config):
         with open(config.train_split[i-1], 'w') as handle:
             for line in f.readlines():
                 line = line.strip()
+                if line == '-DOCSTART- O':
+                    continue
                 if line == '' and curr_line == '': j+=1
                 curr_line = line
                 if j >= lower_lim and j < upper_lim:
                     handle.write(line + '\n')
                 elif j >= upper_lim:
                     lower_lim = upper_lim
-                    upper_lim += upper_lim
+                    upper_lim += math.ceil(14986 / config.num_splits)
                     break
     f.close()
+    open(config.dummy_train, "w").writelines([l for l in open(config.train_split[config.split]).readlines()])
 
 
 def main():
@@ -72,7 +75,7 @@ def main():
     # ------------------------------------------------------------------
     # Trim GloVe Vectors
     # ------------------------------------------------------------------
-    vocab = load_vocab(config.filename_words)
+    vocab, _ = load_vocab(config.filename_words)
     export_trimmed_glove_vectors(vocab, config.filename_glove,
                                 config.filename_trimmed, config.dim_word)
 

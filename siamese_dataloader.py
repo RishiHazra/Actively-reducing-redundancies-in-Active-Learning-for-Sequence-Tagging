@@ -16,7 +16,7 @@ class Dataset():
 
         max_len = max([len(list) for list in X1])
         for i, row in enumerate(X1):
-            if len(row) < max_len:
+            if len(row) <= max_len:
                 X1[i] += [np.zeros(600).tolist()]*(max_len-len(row))
                 X2[i] += [np.zeros(600).tolist()]*(max_len-len(X2[i]))
 

@@ -8,16 +8,19 @@ config = Config()
 class Siamese():
 
     def __init__(
-            self, embedding_size, hidden_units, l2_reg_lambda, batch_size, n_layers):
+            self, embedding_size, hidden_units, l2_reg_lambda, n_layers, batch_size):
         # -----------------------------------------------------------
         # Placeholders for input, output and dropout
         # -----------------------------------------------------------
         self.input_x1 = tf.placeholder(tf.float32, [None, None, 2 * config.hidden_size_lstm], name="input_x1")
         self.input_x2 = tf.placeholder(tf.float32, [None, None, 2 * config.hidden_size_lstm], name="input_x2")
-        self.seq_len = tf.placeholder(tf.int32, [None], name='seq_len')
+        self.seq_len1 = tf.placeholder(tf.int32, [None], name='seq_len1')
+        self.seq_len2 = tf.placeholder(tf.int32, [None], name='seq_len2')
         self.input_y = tf.placeholder(tf.float32, [None], name="input_y")
         self.max_len = tf.placeholder(tf.int32, name='max_seq_len')
         self.dropout_keep_prob = tf.placeholder(tf.float32, name="dropout_keep_prob")
+        self.batch_size = tf.placeholder_with_default(batch_size, shape=[], name='batch_size_dynamic')
+
 
         # Keeping track of l2 regularization loss (optional)
         l2_loss = tf.constant(0.0, name="l2_loss")
@@ -26,21 +29,23 @@ class Siamese():
         # ouput scores
         #----------------------------------------------------------
         self.out1 = self.RNN(self.input_x1, self.dropout_keep_prob, "side1", embedding_size,
-                               self.seq_len, hidden_units, n_layers, batch_size, self.max_len)
+                               self.seq_len1, hidden_units, n_layers, self.batch_size, self.max_len)
         self.out2 = self.RNN(self.input_x2, self.dropout_keep_prob, "side2", embedding_size,
-                               self.seq_len, hidden_units, n_layers, batch_size, self.max_len)
+                               self.seq_len2, hidden_units, n_layers, self.batch_size, self.max_len)
         self.distance = tf.exp(-1*tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(self.out1, self.out2)),
                                                         1, keepdims=True)))
         #self.distance = tf.div(self.distance, tf.add(tf.sqrt(tf.reduce_sum(tf.square(self.out1), 1, keepdims=True)),
                                     #tf.sqrt(tf.reduce_sum(tf.square(self.out2), 1, keepdims=True))))
         with tf.name_scope('output'):
+            self.out1 = tf.identity(self.out1, name='out1')
+            self.out2 = tf.identity(self.out2, name='out2')
             self.distance = tf.reshape(self.distance, [-1], name="distance")
 
         # -----------------------------------------------------------
         # using contrastive loss
         # -----------------------------------------------------------
         with tf.name_scope('loss'):
-            self.loss = self.contrastive_loss(self.input_y, self.distance, batch_size)
+            self.loss = self.contrastive_loss(self.input_y, self.distance, self.batch_size)
 
 
     def RNN(self, x, dropout, scope, embedding_size, sequence_length,
@@ -79,4 +84,4 @@ class Siamese():
     def contrastive_loss(self, y, d, batch_size):
         tmp = tf.abs(y-d)
         #tmp = y * tf.square(d) + (1 - y) * tf.square(tf.maximum((1 - d), 0))
-        return tf.reduce_sum(tmp) / batch_size / 2
+        return tf.reduce_mean(tmp) / 2

@@ -51,9 +51,8 @@ siameseModel = Siamese(
     embedding_size=args.embedding_dim,
     hidden_units=args.hidden_units,
     l2_reg_lambda=args.l2_reg_lambda,
-    batch_size=args.batch_size,
     n_layers=args.n_layers,
-
+    batch_size=args.batch_size
 )
 
 #--------------------------------------------------------------------
@@ -99,7 +98,8 @@ def train_step(x1_batch, x2_batch, y_batch, seq_len, max_len, epoch):
         feed_dict = {
             siameseModel.input_x1 : x1_batch,
             siameseModel.input_x2 : x2_batch,
-            siameseModel.seq_len  : seq_len,
+            siameseModel.seq_len1 : seq_len,
+            siameseModel.seq_len2 : seq_len,
             siameseModel.input_y  : y_batch,
             siameseModel.max_len  : max_len,
             siameseModel.dropout_keep_prob : args.dropout_keep_prob
@@ -109,7 +109,8 @@ def train_step(x1_batch, x2_batch, y_batch, seq_len, max_len, epoch):
         feed_dict = {
             siameseModel.input_x1 : x2_batch,
             siameseModel.input_x2 : x1_batch,
-            siameseModel.seq_len  : seq_len,
+            siameseModel.seq_len1 : seq_len,
+            siameseModel.seq_len2 : seq_len,
             siameseModel.input_y  : y_batch,
             siameseModel.max_len  : max_len,
             siameseModel.dropout_keep_prob : args.dropout_keep_prob
@@ -132,7 +133,8 @@ def dev_step(x1_batch, x2_batch, y_batch, seq_len, max_len, plot=False):
          feed_dict = {
              siameseModel.input_x1 : x1_batch,
              siameseModel.input_x2 : x2_batch,
-             siameseModel.seq_len  : seq_len,
+             siameseModel.seq_len1 : seq_len,
+             siameseModel.seq_len2 : seq_len,
              siameseModel.input_y  : y_batch,
              siameseModel.max_len: max_len,
              siameseModel.dropout_keep_prob : 1.0
@@ -142,7 +144,8 @@ def dev_step(x1_batch, x2_batch, y_batch, seq_len, max_len, plot=False):
          feed_dict = {
              siameseModel.input_x1 : x2_batch,
              siameseModel.input_x2 : x1_batch,
-             siameseModel.seq_len  : seq_len,
+             siameseModel.seq_len1 : seq_len,
+             siameseModel.seq_len2 : seq_len,
              siameseModel.input_y  : y_batch,
              siameseModel.max_len  : max_len,
              siameseModel.dropout_keep_prob : 1.0
@@ -199,7 +202,7 @@ with tf.Session() as sess:
            saver.save(sess, checkpoint_prefix)
            print("Saved model {} checkpoint to {}\n".
                       format(epoch, checkpoint_prefix))
-           plot_hist(np.reshape(lab_val,-1), epoch)
+           #plot_hist(np.reshape(lab_val,-1), epoch)
 
     toc = time.time()
     print('tic-toc : {} sec'.format(toc-tic))
