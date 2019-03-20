@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import os.path
 import tensorflow as tf
 import sys
 
@@ -133,6 +134,7 @@ class NERModel(BaseModel):
             word_embeddings = tf.nn.embedding_lookup(_word_embeddings,
                                                      self.word_ids, name="word_embeddings")
 
+
         with tf.variable_scope("chars"):
             if self.config.use_chars:
                 # get char embeddings matrix
@@ -140,6 +142,8 @@ class NERModel(BaseModel):
                     name="_char_embeddings",
                     dtype=tf.float32,
                     shape=[self.config.nchars, self.config.dim_char])
+
+                # [shape = (batch, sentence, word, dim of char emb)]
                 char_embeddings = tf.nn.embedding_lookup(_char_embeddings,
                                                          self.char_ids, name="char_embeddings")
 
@@ -160,9 +164,10 @@ class NERModel(BaseModel):
 
                 # read and concat output
                 _, ((_, output_fw), (_, output_bw)) = _output
+                # shape = [batch * sentence, 2 * char_hidden_size]
                 output = tf.concat([output_fw, output_bw], axis=-1)
 
-                # shape = (batch size, max sentence length, char hidden size)
+                # shape = (batch size, max sentence length, 2*char hidden size)
                 self.output = tf.reshape(output,
                                          shape=[s[0], s[1], 2 * self.config.hidden_size_char])
                 word_embeddings = tf.concat([word_embeddings, self.output], axis=-1)
@@ -453,11 +458,6 @@ class NERModel(BaseModel):
         Returns:
             metrics: (dict) metrics["acc"] = 98.4, ...
         """
-        e, d, f = {}, {}, {}
-        accs = []
-
-        correct_preds, total_correct, total_preds = 0., 0., 0.
-
         #---------------------------------------------------------------------------
         # retrain_file : split to be retrained on (changes in every round of AL)
         # train_file   : train split for the current AL round
@@ -466,86 +466,104 @@ class NERModel(BaseModel):
         #---------------------------------------------------------------------------
 
         if self.config.mode == 'feedback':
+            num_fedback = 0.0
             train_file = self.config.train_split[self.config.split]
             newSamples = self.config.filename_newSamples
             retrain_file = self.config.filename_retrain
             AL_file = self.config.train_split[self.config.sample_split]
+            words, tags, prob, enc, seq_len = self.feedback_helper(dev)
 
-            ind_confused, PROB, enc, seq_len = self.feedback_helper(test)
-            AL.feedback(AL_file, newSamples, ind_confused, PROB, enc, seq_len, self.sess)
-            AL.random_sampling(self.config.num_retrain, train_file, newSamples, retrain_file)
+            if os.path.isfile('num_fedback.npy'):
+                num_fedback = np.load('num_fedback.npy')
+            num_fedback += AL.feedback(AL_file, newSamples, self.config.dummy_train,
+                                       words, tags, prob, enc, seq_len)
+            print('\nnum_fedback : {}'.format(num_fedback))
+            np.save('num_fedback.npy', num_fedback)
+            AL.random_sampling(train_file, newSamples, retrain_file, num_fedback)
             print('Feedback Done...')
 
+        else:
+            e, d, f = {}, {}, {}
+            accs = []
 
-        for words, labels in minibatches(test, self.config.batch_size):
-            labels_pred, sequence_lengths, prob = self.predict_batch(words)
+            correct_preds, total_correct, total_preds= 0., 0., 0.
 
-            for lab, lab_pred, length in zip(labels, labels_pred,
-                                             sequence_lengths):
-                lab = lab[:length]
-                lab_pred = lab_pred[:length]
-                accs += [a == b for (a, b) in zip(lab, lab_pred)]
-                lab_chunks = set(get_chunks(lab, self.config.vocab_tags))
-                lab_pred_chunks = set(get_chunks(lab_pred,
-                                                 self.config.vocab_tags))
+            for words, labels in minibatches(test, self.config.batch_size):
+                labels_pred, sequence_lengths, prob = self.predict_batch(words)
 
-                c = lab_chunks & lab_pred_chunks
-                correct_preds += len(lab_chunks & lab_pred_chunks)
-                total_preds += len(lab_pred_chunks)
-                total_correct += len(lab_chunks)
+                for lab, lab_pred, length in zip(labels, labels_pred,
+                                                 sequence_lengths):
+                    lab = lab[:length]
+                    lab_pred = lab_pred[:length]
+                    accs += [a == b for (a, b) in zip(lab, lab_pred)]
+                    lab_chunks = set(get_chunks(lab, self.config.vocab_tags))
+                    lab_pred_chunks = set(get_chunks(lab_pred,
+                                                     self.config.vocab_tags))
 
-                # ------------------------------------------------------
-                # d : correct predictions
-                # e : total correct
-                # f : total predictions
-                # ------------------------------------------------------
+                    c = lab_chunks & lab_pred_chunks
+                    correct_preds += len(lab_chunks & lab_pred_chunks)
+                    total_preds += len(lab_pred_chunks)
+                    total_correct += len(lab_chunks)
 
-                def calculate(chunks, preds):
-                    for i in range(len(chunks)):
-                        l = chunks.pop()[0]
-                        if l not in preds.keys():
-                            preds[l] = 1
-                        else:
-                            preds[l] += 1
-                    return preds
+                    # ------------------------------------------------------
+                    # d : correct predictions
+                    # e : total correct
+                    # f : total predictions
+                    # ------------------------------------------------------
 
-                d = calculate(c, d)
-                e = calculate(lab_chunks, e)
-                f = calculate(lab_pred_chunks, f)
+                    def calculate(chunks, preds):
+                        for i in range(len(chunks)):
+                            l = chunks.pop()[0]
+                            if l not in preds.keys():
+                                preds[l] = 1
+                            else:
+                                preds[l] += 1
+                        return preds
+
+                    d = calculate(c, d)
+                    e = calculate(lab_chunks, e)
+                    f = calculate(lab_pred_chunks, f)
+
+            p = correct_preds / total_preds if correct_preds > 0 else 0
+            r = correct_preds / total_correct if correct_preds > 0 else 0
+            f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
+            acc = np.mean(accs)
+            #print('total_correct: ', e, ' correct_preds: ', d, 'total_preds:', f)
+            return {"acc": 100 * acc, "f1": 100 * f1, "correct_preds": correct_preds, "total_correct": total_correct,
+                    "p": p, "r": r, "total_preds": total_preds}
 
 
-        p = correct_preds / total_preds if correct_preds > 0 else 0
-        r = correct_preds / total_correct if correct_preds > 0 else 0
-        f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        acc = np.mean(accs)
-        print('total_correct: ', e, ' correct_preds: ', d, 'total_preds:' , f)
-        return {"acc": 100 * acc, "f1": 100 * f1, "correct_preds": correct_preds, "total_correct": total_correct,
-                "p": p, "r": r, "total_preds": total_preds}
-
-
-    def feedback_helper(self, AL_file):
+    def feedback_helper(self, dev):
         """
             helper function for collecting the most confused examples
             and feed it to the subsequent layers of the Active Learning
+
+            dev : file on which AL is performed
         """
         print('\n Feedback mode... \n')
-        enc, ind_confused, seq_len_confused = [], [], []
-        PROB = {}  # used for outlier detection
-        ind = 0
-        for words, labels in minibatches(AL_file, 10):
+        enc, prob_confused, seq_len_confused, words_confused, tags_confused = \
+            [], [], [], [], []
+
+        for words, labels in minibatches(dev, 10):
             labels_pred, sequence_lengths, prob = self.predict_batch(words)
+
             for X in range(len(prob)):
-                ind += 1
-                if prob[X] <= 30:
-                    ind_confused += [ind]
-                    PROB[ind] = prob[X]
+                if prob[X] <= self.config.threshold:
+                    prob_confused += [prob[X]]
                     seq_len_confused += [sequence_lengths[X]]
                     fd, _ = self.get_feed_dict([words[X]], dropout=1.0)
-                    Enc = self.sess.run([self.encoded], feed_dict=fd)
-                    enc += [np.reshape(Enc, (np.array(Enc).shape[1], np.array(Enc).shape[2]))]
 
-        print('\n Low confidence sentences extracted ... \n ')
-        return ind_confused, PROB, enc, seq_len_confused
+                    word_list = []
+                    for i in range(sequence_lengths[X]):
+                        word_list += [''.join([self.config.vocab_chars_inv[char] for char in words[X][0][i]])]
+                    words_confused += [word_list]
+                    tags_confused += [[self.config.vocab_tags_inv[label] for label in labels[X]]]
+
+                    Enc = self.sess.run([self.encoded], feed_dict=fd)
+                    enc += [np.reshape(Enc, (np.array(Enc).shape[1], np.array(Enc).shape[2])).tolist()]
+
+        print('\n {} low confidence sentences extracted ... \n '.format(len(seq_len_confused)))
+        return words_confused, tags_confused, prob_confused, enc, seq_len_confused
 
 
     def predict(self, words_raw):
@@ -569,3 +587,20 @@ class NERModel(BaseModel):
         print(scores,'\n')
         '''
         # return preds
+
+#TODO : consider the dev split as an additional train split                 : don't do this
+#TODO : add skipthoughts similarity
+#TODO : add outlier detection
+#TODO : make dense siamese twins                                            : DONE
+#TODO : add a function for plotting graphs
+#TODO : add BALD active learning strategy
+#TODO : try to replicate the AWS AL strategy                                : could not be done as they didn't share their code
+#TODO : should the margin based method be normalized ???
+#TODO : add POS tagging
+#TODO : add OntoNotes dataset
+#TODO : change encoding to last state of word-BiLSTM                        : DONE
+#TODO : extend to medical datasets
+#TODO : perform experiments with and without outlier detection
+#TODO : check whether proper sentences are being sample from train split    : DONE
+#TODO : perform dynamic clustering                                          : DONE
+#TODO : periodic retrain of siamese twins                                   : DONE
