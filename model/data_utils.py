@@ -1,6 +1,4 @@
 import numpy as np
-import os
-
 
 # shared global variables to be imported from model also
 UNK = "$UNK$"
@@ -162,15 +160,16 @@ def load_vocab(filename):
         d: dict[word] = index
     """
     try:
-        d = dict()
+        d, d_inv = dict(), dict()
         with open(filename) as f:
             for idx, word in enumerate(f):
                 word = word.strip()
                 d[word] = idx
+                d_inv[idx] = word
 
     except IOError:
         raise MyIOError(filename)
-    return d
+    return d, d_inv
 
 
 def export_trimmed_glove_vectors(vocab, glove_filename, trimmed_filename, dim):

@@ -132,12 +132,16 @@ class BaseModel(object):
             test: instance of class Dataset
         """
         self.logger.info("Testing model over test set")
-        metrics = self.run_evaluate(test, dev, mode)
-        msg = " - ".join(["{} {:04.2f}".format(k, v)
-                for k, v in metrics.items()])
-        self.logger.info(msg)
-        print(msg)
-        return metrics
+
+        if self.config.mode == 'feedback':
+            self.run_evaluate(test, dev, mode)
+        else:
+            metrics = self.run_evaluate(test, dev, mode)
+            msg = " - ".join(["{} {:04.2f}".format(k, v)
+                              for k, v in metrics.items()])
+            self.logger.info(msg)
+            print(msg)
+            return metrics
 
 
     def get_threshold(self, test, threshold):
