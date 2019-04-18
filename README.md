@@ -1,2 +1,2 @@
-# Active-Learning-with-Siamese-Twins-for-NER
+# Active-Learning-with-Siamese-Twins-for-sequence-tagging
 Active Learning for sequence tagging
