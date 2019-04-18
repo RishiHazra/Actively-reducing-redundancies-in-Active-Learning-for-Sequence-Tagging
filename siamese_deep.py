@@ -26,7 +26,7 @@ class Siamese():
         l2_loss = tf.constant(0.0, name="l2_loss")
 
         #----------------------------------------------------------
-        # ouput scores
+        # output scores
         #----------------------------------------------------------
         self.out1 = self.RNN(self.input_x1, self.dropout_keep_prob, "side1", embedding_size,
                                self.seq_len1, hidden_units, n_layers, self.batch_size, self.max_len)

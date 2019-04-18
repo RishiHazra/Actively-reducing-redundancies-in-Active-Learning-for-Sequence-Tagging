@@ -3,11 +3,20 @@ import numpy as np
 import math
 import random
 import collections
-from itertools import combinations
+
+import sys
+from sklearn.metrics.pairwise import cosine_similarity as cos_sim
 from sklearn.cluster import SpectralClustering
 import tensorflow as tf
 
 config = Config()
+
+#--------------------------------------------------------------------------
+# follow instructions from : https://github.com/ryankiros/skip-thoughts
+#--------------------------------------------------------------------------
+sys.path.append('../Skip Thoughts')
+import skipthoughts
+
 
 class Siamese_Model():
     def __init__(self, session):
@@ -73,7 +82,7 @@ class Active_Learning():
 
         score_final = np.max(trellis[-1])  # Score of sequences (higher = better)
 
-        if (self.active_algo == 'mg'):
+        if (self.active_algo == 'margin'):
             top_scores = trellis[-1][np.argsort(trellis[-1])[-2:]]
             margin = abs(top_scores[0] - top_scores[1])
             score_final = margin
@@ -116,12 +125,12 @@ class Active_Learning():
             score_final = 0.0
             for i in range(0, ntoken):
                 score_final += l[i] * np.log(l[i])
-            score_final = score_final / ntoken
+            score_final = score_final / ntoken #length normalized entropy
 
         return score_final
 
 
-    def feedback(self, AL_file, newSamples, dummy_train, words_conf, tags_conf, prob, enc, seq_len):
+    def feedback(self, newSamples, dummy_train, words_conf, tags_conf, prob, enc, seq_len):
         '''
         feeds back data from validation set to retrain
         set in a self-training (active learning) setup
@@ -135,7 +144,7 @@ class Active_Learning():
                     to a different file for re-trainings.
         '''
         print('\nClustering to find similarity \n')
-        clusters= self.cluster_sentences(enc, seq_len)
+        clusters= self.cluster_sentences(enc, seq_len, words_conf)
 
         most_representative_index = []
         for cluster in range(config.nclusters):
@@ -148,7 +157,7 @@ class Active_Learning():
             # considered as outliers and dropped.
             #-----------------------------------------------------------------
             most_representative_index += \
-                [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:2]
+                [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:5]
 
         index = sorted(most_representative_index )
         with open(newSamples, 'a') as handle1, \
@@ -215,7 +224,7 @@ class Active_Learning():
         return clusters
 
 
-    def cluster_sentences(self, enc, seq_len):
+    def cluster_sentences(self, enc, seq_len, words_conf):
         # ------------------------------------------------------------
         # dynamic clustering depending on num low confidence samples
         # ------------------------------------------------------------
@@ -243,13 +252,18 @@ class Active_Learning():
                 [seq_len[i] for i in split1], [seq_len[i] for i in split2]
             sent1, sent2 = [enc[i] for i in split1], [enc[i] for i in split2]
 
+            if config.model.split()[1] == 'LSTM':
+                dim = config.hidden_size_lstm
+            else:
+                dim = 2 * config.hidden_size_lstm
+
             for i, row in enumerate(sent1):
                 if len(row) <= max_len:
-                    sent1[i] += [np.zeros(600).tolist()] * (max_len - len(row))
+                    sent1[i] += [np.zeros(dim).tolist()] * (max_len - len(row))
                     try:
-                        sent2[i] += [np.zeros(600).tolist()] * (max_len - len(sent2[i]))
+                        sent2[i] += [np.zeros(dim).tolist()] * (max_len - len(sent2[i]))
                     except IndexError:
-                        sent2 += [[np.zeros(600).tolist()] * len(sent1[i])]
+                        sent2 += [[np.zeros(dim).tolist()] * len(sent1[i])]
                         seq_len2 += [1]
 
             siamese_enc = np.concatenate(siamese.run(sent1, sent2, seq_len1, seq_len2,
@@ -259,17 +273,25 @@ class Active_Learning():
                 shape = np.array(enc).shape
                 out = np.reshape(np.repeat(enc, [shape[0]], axis=0), (-1,shape[0],shape[1]))
                 X = np.exp(-1 * np.sqrt(np.sum(
-                    np.square(out - np.transpose(out, (1,0,2))), 2, keepdims=False)))
+                            np.square(out - np.transpose(out, (1,0,2))), 2, keepdims=False)))
                 return X
 
             X = similarity_scores(siamese_enc)
             clustering = self.spectral_clustering(X, n_clusters)
 
         elif config.similarity == 'cosine':
-            sents = enc / np.linalg.norm(enc)
-            X = np.cos(np.matmul(sents, np.transpose(sents)))
-            _, eigen_vectors = np.linalg.eigh(X)
-            clustering = self.spectral_clustering(eigen_vectors, n_clusters)
+            enc1 = [emb[-1] for emb in enc]
+            X = cos_sim(enc1, enc1)
+            X[X<0] = 0
+            clustering = self.spectral_clustering(X, n_clusters)
+
+        elif config.similarity == 'skipthoughts':
+            model = skipthoughts.load_model()
+            encoder = skipthoughts.Encoder(model)
+            vectors = encoder.encode([' '.join(list) for list in words_conf])
+            vectors = vectors / np.linalg.norm(vectors)
+            X = np.cos(np.matmul(vectors, np.transpose(vectors)))
+            clustering = self.spectral_clustering(X, n_clusters)
 
         return clustering
 

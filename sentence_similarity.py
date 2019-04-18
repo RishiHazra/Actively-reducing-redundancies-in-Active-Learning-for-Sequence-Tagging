@@ -18,7 +18,7 @@ from siamese_dataloader import Dataset
 # Please don't alter !!!)
 #-------------------------------------------------------------------
 parser = ap.ArgumentParser()
-parser.add_argument('--embedding-dim', type=int, default=600,
+parser.add_argument('--embedding_dim', type=int, default=600,
                     help='Dimension of NER model encoded embedding')
 parser.add_argument('--dropout_keep_prob', type=int, default=1.0,
                     help='Dropout keep probability')
@@ -30,7 +30,7 @@ parser.add_argument('--batch_size', type=int, default=48,
                     help='Batch Size')
 parser.add_argument('--val_batch', type=int, default=48,
                     help='Validation batch size')
-parser.add_argument('--num_epochs', type=int, default=61,
+parser.add_argument('--num_epochs', type=int, default=31,
                     help='Number of training epochs')
 parser.add_argument('--evaluate_every', type=int, default=2,
                     help='Evaluate model on dev set after this many steps')
@@ -176,7 +176,7 @@ with tf.Session() as sess:
 
         for split in splits:
             x1_batch, x2_batch, y_batch, seq_len, max_len = \
-                dataloader.get_item(split)
+                dataloader.get_item(split, args.embedding_dim)
             total_train_loss += train_step(x1_batch, x2_batch, y_batch, seq_len, max_len, epoch)
         print('train Loss {} for epoch {}'.format(total_train_loss, epoch))
 
@@ -188,7 +188,7 @@ with tf.Session() as sess:
             lab_val = []
             for split in splits_val:
                 x1_dev, x2_dev, y_dev, seq_len_val, max_len_val = \
-                    dataloader.get_item(split)
+                    dataloader.get_item(split, args.embedding_dim)
                 try:
                     loss, lab = dev_step(x1_dev, x2_dev, y_dev, seq_len_val, max_len_val)
                     total_dev_loss += loss
