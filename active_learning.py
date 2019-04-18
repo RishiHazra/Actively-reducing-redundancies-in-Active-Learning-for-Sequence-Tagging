@@ -157,7 +157,7 @@ class Active_Learning():
             # considered as outliers and dropped.
             #-----------------------------------------------------------------
             most_representative_index += \
-                [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:5]
+                [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:1]
 
         index = sorted(most_representative_index )
         with open(newSamples, 'a') as handle1, \
