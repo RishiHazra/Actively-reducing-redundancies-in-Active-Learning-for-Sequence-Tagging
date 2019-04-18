@@ -12,7 +12,7 @@ do
         do
             if [ "$(( $k + $i ))" -ne "50" ] && [ "$(( $k + $i ))" -ne "45" ]
             then
-                python evaluate.py --mode 'feedback' --split 45 --sample_split $(( $k + $i )) --num_retrain $(( $k + $i )) --sample_train $(( 20 * $i )) --active_strategy 'entropy' --similarity $sim --threshold 40
+                python evaluate.py --mode 'feedback' --split 45 --sample_split $(( $k + $i )) --num_retrain $(( $k + $i )) --sample_train $(( 20 * $i )) --active_strategy 'entropy' --similarity $sim --threshold 40 --model 'CNN BILSTM CRF'
                 python train.py --nepochs 2 --mode 'retrain' --num_retrain $(( $k + $i )) --model 'CNN BILSTM CRF'
             fi
         done
