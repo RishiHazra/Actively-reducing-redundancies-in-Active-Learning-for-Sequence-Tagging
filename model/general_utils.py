@@ -3,7 +3,6 @@ import sys
 import logging
 import numpy as np
 
-
 def get_logger(filename):
     """Return a logger instance that writes in filename
     Args:

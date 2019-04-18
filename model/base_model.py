@@ -1,7 +1,7 @@
 import os
 import tensorflow as tf
-import pickle as pkl
-
+import xlsxwriter
+from openpyxl import load_workbook
 
 class BaseModel(object):
     """Generic class for general methods that are not specific to NER"""
@@ -90,7 +90,7 @@ class BaseModel(object):
         Args:
             dir_output: (string) where the results are written
         """
-        self.merged      = tf.summary.merge_all()
+        self.merged = tf.summary.merge_all()
         self.file_writer = tf.summary.FileWriter(self.config.dir_output,
                 self.sess.graph)
 
@@ -104,6 +104,10 @@ class BaseModel(object):
         best_score = 0
         nepoch_no_imprv = 0 # for early stopping
         self.add_summary() # tensorboard
+
+        worksheetName = self.config.active_algo + '_' + \
+                                 self.config.similarity + '_' + 'split_' + \
+                                    str(self.config.split)
 
         for epoch in range(self.config.nepochs):
             self.logger.info("Epoch {:} out of {:}".format(epoch + 1,
@@ -125,6 +129,25 @@ class BaseModel(object):
                             "improvement".format(nepoch_no_imprv))
                     break
 
+        if self.config.periodic:
+            wb = load_workbook(self.config.model + '.xlsx')
+            sheet = wb.get_sheet_by_name(worksheetName)
+            sheet.cell(row=self.config.excel_id+1, column=1).value = (len(train) + self.config.batch_size - 1) / 149.87
+            sheet.cell(row=self.config.excel_id+1, column=2).value = best_score
+            wb.save(self.config.model + '.xlsx')
+            print('saved excel file')
+
+        elif self.config.mode == 'train':
+            wb = xlsxwriter.Workbook(self.config.model + '.xlsx')
+            style = wb.add_format({'bold': True, 'font_color': 'red'})
+            sheet = wb.get_worksheet_by_name(worksheetName)
+            if sheet is None:
+                sheet = wb.add_worksheet(worksheetName)
+                sheet.write(0, 0, '% samples', style)
+                sheet.write(0, 1, 'F1 Score', style)
+            sheet.write(self.config.excel_id, 0, (len(train) + self.config.batch_size - 1) / 149.87)
+            sheet.write(self.config.excel_id, 1, best_score)
+            wb.close()
 
     def evaluate(self, test, dev, mode):
         """Evaluate model on test set
@@ -166,3 +189,4 @@ class BaseModel(object):
         """
         self.logger.info("\n Encoding sentences of SICK dataset \n")
         self.encode_sents(sick)
+

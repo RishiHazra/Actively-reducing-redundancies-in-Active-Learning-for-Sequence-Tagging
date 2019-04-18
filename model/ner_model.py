@@ -1,12 +1,16 @@
 import numpy as np
 import os
 import os.path
-import tensorflow as tf
 import sys
+import operator
+from collections import Counter
+
+import tensorflow as tf
 
 from .data_utils import minibatches, pad_sequences, get_chunks, UNK
 from .general_utils import Progbar
 from .base_model import BaseModel
+from .modules import CNN_BILSTM_CRF, LSTM_LSTM_CRF, BILSTM_BILSTM_CRF_attention
 from .config import Config
 
 sys.path.append("..")
@@ -22,6 +26,13 @@ from active_learning import Active_Learning
 config = Config()
 AL = Active_Learning(config.active_algo)
 
+if config.model == "CNN BILSTM CRF":
+    model = CNN_BILSTM_CRF
+elif config.model == "LSTM LSTM CRF":
+    model = LSTM_LSTM_CRF
+elif config.model == "BILSTM BILSTM CRF":
+    model = BILSTM_BILSTM_CRF_attention
+
 
 class NERModel(BaseModel):
     """Specialized class of Model for NER"""
@@ -29,10 +40,9 @@ class NERModel(BaseModel):
     def __init__(self, config):
         super(NERModel, self).__init__(config)
         self.idx_to_tag = {idx: tag for tag, idx in
-                           self.config.vocab_tags.items()}
+                           config.vocab_tags.items()}
         self.tag_to_idx = {tag: idx for tag, idx in
-                           self.config.vocab_tags.items()}
-
+                           config.vocab_tags.items()}
 
     def add_placeholders(self):
         """Define placeholders = entries to computational graph"""
@@ -63,8 +73,6 @@ class NERModel(BaseModel):
                                  name="lr")
 
 
-
-
     def get_feed_dict(self, words, labels=None, lr=None, dropout=None):
         """Given some data, pad it and build a feed dictionary
         Args:
@@ -77,7 +85,7 @@ class NERModel(BaseModel):
             dict {placeholder: value}
         """
         # perform padding of the given data
-        if self.config.use_chars:
+        if config.use_chars:
             char_ids, word_ids = zip(*words)
             word_ids, sequence_lengths = pad_sequences(word_ids, 0)
             char_ids, word_lengths = pad_sequences(char_ids, pad_tok=0,
@@ -91,7 +99,7 @@ class NERModel(BaseModel):
             self.sequence_lengths: sequence_lengths
         }
 
-        if self.config.use_chars:
+        if config.use_chars:
             feed[self.char_ids] = char_ids
             feed[self.word_lengths] = word_lengths
 
@@ -107,124 +115,6 @@ class NERModel(BaseModel):
 
         return feed, sequence_lengths
 
-
-
-    def add_word_embeddings_op(self):
-        """Defines self.word_embeddings
-        If self.config.embeddings is not None and is a np array initialized
-        with pre-trained word vectors, the word embeddings is just a look-up
-        and we don't train the vectors. Otherwise, a random matrix with
-        the correct shape is initialized.
-        """
-        loss = 0
-        with tf.variable_scope("words"):
-            if self.config.embeddings is None:
-                self.logger.info("WARNING: randomly initializing word vectors")
-                _word_embeddings = tf.get_variable(
-                    name="_word_embeddings",
-                    dtype=tf.float32,
-                    shape=[self.config.nwords, self.config.dim_word])
-            else:
-                _word_embeddings = tf.Variable(
-                    self.config.embeddings,
-                    name="_word_embeddings",
-                    dtype=tf.float32,
-                    trainable=self.config.train_embeddings)
-
-            word_embeddings = tf.nn.embedding_lookup(_word_embeddings,
-                                                     self.word_ids, name="word_embeddings")
-
-
-        with tf.variable_scope("chars"):
-            if self.config.use_chars:
-                # get char embeddings matrix
-                _char_embeddings = tf.get_variable(
-                    name="_char_embeddings",
-                    dtype=tf.float32,
-                    shape=[self.config.nchars, self.config.dim_char])
-
-                # [shape = (batch, sentence, word, dim of char emb)]
-                char_embeddings = tf.nn.embedding_lookup(_char_embeddings,
-                                                         self.char_ids, name="char_embeddings")
-
-                # put the time dimension on axis=1
-                s = tf.shape(char_embeddings)
-                char_embeddings = tf.reshape(char_embeddings,
-                                             shape=[s[0] * s[1], s[-2], self.config.dim_char])
-                word_lengths = tf.reshape(self.word_lengths, shape=[s[0] * s[1]])
-
-                # bi lstm on chars
-                cell_fw = tf.contrib.rnn.LSTMCell(self.config.hidden_size_char,
-                                                  state_is_tuple=True)
-                cell_bw = tf.contrib.rnn.LSTMCell(self.config.hidden_size_char,
-                                                  state_is_tuple=True)
-                _output = tf.nn.bidirectional_dynamic_rnn(
-                    cell_fw, cell_bw, char_embeddings,
-                    sequence_length=word_lengths, dtype=tf.float32)
-
-                # read and concat output
-                _, ((_, output_fw), (_, output_bw)) = _output
-                # shape = [batch * sentence, 2 * char_hidden_size]
-                output = tf.concat([output_fw, output_bw], axis=-1)
-
-                # shape = (batch size, max sentence length, 2*char hidden size)
-                self.output = tf.reshape(output,
-                                         shape=[s[0], s[1], 2 * self.config.hidden_size_char])
-                word_embeddings = tf.concat([word_embeddings, self.output], axis=-1)
-
-        self.word_embeddings = tf.nn.dropout(word_embeddings, self.dropout)
-
-
-
-
-    def add_logits_op(self):
-        """Defines self.logits
-        For each word in each sentence of the batch, it corresponds to a vector
-        of scores, of dimension equal to the number of tags.
-        """
-        with tf.variable_scope("bi-lstm"):
-            cell_fw = tf.contrib.rnn.LSTMCell(self.config.hidden_size_lstm)
-            cell_bw = tf.contrib.rnn.LSTMCell(self.config.hidden_size_lstm)
-            (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(
-                cell_fw, cell_bw, self.word_embeddings,
-                sequence_length=self.sequence_lengths, dtype=tf.float32)
-            output = tf.concat([output_fw, output_bw], axis=-1)
-
-            word_output_tensor = tf.layers.dense(output, 2 * self.config.dim_word, activation=tf.tanh)
-            char_output_tensor = tf.layers.dense(self.output, 2 * self.config.dim_word, activation=tf.tanh)
-            attention_evidence_tensor = tf.concat([word_output_tensor, char_output_tensor], axis=2)
-
-            # ---------------------------------------------------------
-            # passing through 2-dense layers
-            # ---------------------------------------------------------
-            attention_output = tf.layers.dense(attention_evidence_tensor, 2 * self.config.dim_word,
-                                               activation=tf.tanh)
-            attention_output = tf.layers.dense(attention_output, 2 * self.config.dim_word,
-                                               activation=tf.sigmoid)
-
-            # ----------------------------------------------------------
-            # convex combination of char biLSTM o/p and word biLSTM o/p
-            # ----------------------------------------------------------
-            output = tf.multiply(word_output_tensor, attention_output) + tf.multiply(char_output_tensor,
-                                                                                     (1.0 - attention_output))
-            output = tf.nn.dropout(output, self.dropout)
-
-
-        with tf.variable_scope("proj"):
-            W = tf.get_variable("W", dtype=tf.float32,
-                                shape=[2 * self.config.hidden_size_lstm, self.config.ntags])
-
-            b = tf.get_variable("b", shape=[self.config.ntags],
-                                dtype=tf.float32, initializer=tf.zeros_initializer())
-
-            nsteps = tf.shape(output)[1]
-            output = tf.reshape(output, [-1, 2 * self.config.hidden_size_lstm])
-            self.encoded = output
-            pred = tf.matmul(output, W) + b
-            self.logits = tf.reshape(pred, [-1, nsteps, self.config.ntags])
-
-
-
     def add_pred_op(self):
         """Defines self.labels_pred
         This op is defined only in the case where we don't use a CRF since in
@@ -233,14 +123,14 @@ class NERModel(BaseModel):
         in python and not in pure tensorflow, we have to make the prediciton
         outside the graph.
         """
-        if not self.config.use_crf:
+        if not config.use_crf:
             self.labels_pred = tf.cast(tf.argmax(self.logits, axis=-1),
                                        tf.int32)
 
 
     def add_loss_op(self):
         """Defines the loss"""
-        if self.config.use_crf:
+        if config.use_crf:
             log_likelihood, trans_params = tf.contrib.crf.crf_log_likelihood(
                 self.logits, self.labels, self.sequence_lengths)
             self.trans_params = trans_params  # need to evaluate it for decoding
@@ -256,19 +146,22 @@ class NERModel(BaseModel):
         tf.summary.scalar("loss", self.loss)
 
 
-
-
     def build(self):
         # NER specific functions
         self.add_placeholders()
-        self.add_word_embeddings_op()
-        self.add_logits_op()
+        obj = model(config, self.word_ids, self.sequence_lengths, self.char_ids, self.word_lengths,
+              self.labels, self.dropout, self.lr)
+        self.add_word_embeddings_op = obj.add_word_embeddings_op()
+        self.add_logits_op = obj.add_logits_op()
+        self.shape = obj.shape
+        self.encoded = obj.encoded
+        self.logits = obj.logits
         self.add_pred_op()
         self.add_loss_op()
 
         # Generic functions that add training op and initialize session
-        self.add_train_op(self.config.lr_method, self.lr, self.loss,
-                          self.config.clip)
+        self.add_train_op(config.lr_method, self.lr, self.loss,
+                          config.clip)
         self.initialize_session()  # now self.sess is defined and vars are init
 
 
@@ -285,9 +178,9 @@ class NERModel(BaseModel):
         once all the sentences are encoded, we start training
         the other model
         """        
-        if not os.path.exists(self.config.dir_model_encoded_SICK ):
-            os.makedirs(self.config.dir_model_encoded_SICK)
-        path = self.config.dir_model_encoded_SICK
+        if not os.path.exists(config.dir_model_encoded_SICK ):
+            os.makedirs(config.dir_model_encoded_SICK)
+        path = config.dir_model_encoded_SICK
         i = 0    
         for words, labels in minibatches(sick, 2):
             fd, _ = self.get_feed_dict(words, dropout=1.0)
@@ -300,7 +193,41 @@ class NERModel(BaseModel):
                     sent_1 = sent1,
                     sent_2 = sent2,
                     lab = labels[0])
-        print('Saved SICK encodings to {}'.format(self.config.dir_model_encoded_SICK))
+        print('Saved SICK encodings to {}'.format(config.dir_model_encoded_SICK))
+
+
+    def BALD_MC(self, words):
+        viterbi_sequences, scores = {}, {}
+        count, samples = [], []
+
+        for _ in range(config.sample_times):
+            fd, sequence_lengths = self.get_feed_dict(words, dropout=0.5)
+            logits, trans_params = self.sess.run(
+                [self.logits, self.trans_params], feed_dict=fd)
+            # ----------------------------------------------------------------
+            # iterate over the sentences because no batching in viterbi_decode
+            # ----------------------------------------------------------------
+            for sent_id, (logit, sequence_length) in enumerate(zip(logits, sequence_lengths)):
+                logit = logit[:sequence_length]  # keep only the valid steps
+                viterbi_seq, viterbi_score = tf.contrib.crf.viterbi_decode(
+                    logit, trans_params)
+
+                #viterbi_score = AL.active_strategy(logit, trans_params, self.tag_to_idx)
+
+                if sent_id in viterbi_sequences.keys():
+                    viterbi_sequences[sent_id] += [viterbi_seq]
+                    scores[sent_id] += [viterbi_score]
+                else:
+                    viterbi_sequences[sent_id] = [viterbi_seq]
+                    scores[sent_id] = [viterbi_score]
+        # -----------------------------------------------------------------------------------
+        # arg_max ( 1 - ( count( mode( y(1),...,y(T) ) ) ) / T )
+        # -----------------------------------------------------------------------------------
+        count += [Counter(tuple(x) for x in value) for value in viterbi_sequences.values()]
+        mc_samples = [max(dict.items(), key=operator.itemgetter(1))[0] for dict in count]
+        scores = [1 - (max(dict.items(), key=operator.itemgetter(1))[1]) / config.sample_times for dict in count]
+
+        return mc_samples, sequence_lengths, list(map(lambda x : -x, scores))
 
 
     def predict_batch(self, words):
@@ -313,7 +240,7 @@ class NERModel(BaseModel):
         """
         fd, sequence_lengths = self.get_feed_dict(words, dropout=1.0)
 
-        if self.config.use_crf:
+        if config.use_crf:
             # ----------------------------------------------------------------
             # get tag scores and transition params of CRF
             # ----------------------------------------------------------------
@@ -335,7 +262,7 @@ class NERModel(BaseModel):
                 #---------------------------------------------------------------
 
                 viterbi_sequences += [viterbi_seq]
-                if self.config.active_algo == "nus":
+                if config.active_algo == "nus":
                     viterbi_score = float(viterbi_score / sequence_length)
                 else:
                     viterbi_score = AL.active_strategy(logit, trans_params, self.tag_to_idx)
@@ -362,7 +289,7 @@ class NERModel(BaseModel):
         #-----------------------------------------------------
         # progbar stuff for logging
         #-----------------------------------------------------
-        batch_size = self.config.batch_size
+        batch_size = config.batch_size
         nbatches = (len(train) + batch_size - 1) // batch_size
         prog = Progbar(target=nbatches)
 
@@ -370,9 +297,9 @@ class NERModel(BaseModel):
         # iterate over dataset
         # -----------------------------------------------------
         for i, (words, labels) in enumerate(minibatches(train, batch_size)):
-            fd, _ = self.get_feed_dict(words, labels, self.config.lr,
-                                       self.config.dropout)
-
+            fd, _ = self.get_feed_dict(words, labels, config.lr,
+                                       config.dropout)
+            #shape = self.sess.run([self.shape], feed_dict=fd)
             _, train_loss, summary = self.sess.run(
                 [self.train_op, self.loss, self.merged], feed_dict=fd)
             prog.update(i + 1, [("train loss", train_loss)])
@@ -426,18 +353,18 @@ class NERModel(BaseModel):
         accs = []
         correct_preds, total_correct, total_preds = 0., 0., 0.
 
-        for words, labels in minibatches(test, self.config.batch_size):
+        for words, labels in minibatches(test, config.batch_size):
             labels_pred, sequence_lengths, prob = self.predict_batch(words)
 
             for lab, lab_pred, length, score in zip(labels, labels_pred,
                                                     sequence_lengths, prob):
-                if score < threshold:
+                if score <= threshold:
                     lab = lab[:length]
                     lab_pred = lab_pred[:length]
                     accs += [a == b for (a, b) in zip(lab, lab_pred)]
-                    lab_chunks = set(get_chunks(lab, self.config.vocab_tags))
+                    lab_chunks = set(get_chunks(lab, config.vocab_tags))
                     lab_pred_chunks = set(get_chunks(lab_pred,
-                                                     self.config.vocab_tags))
+                                                     config.vocab_tags))
                     correct_preds += len(lab_chunks & lab_pred_chunks)
                     total_preds += len(lab_pred_chunks)
                     total_correct += len(lab_chunks)
@@ -465,17 +392,17 @@ class NERModel(BaseModel):
         # AL_file      : file to be sampled from for current round of AL (same as dev file)
         #---------------------------------------------------------------------------
 
-        if self.config.mode == 'feedback':
+        if config.mode == 'feedback':
             num_fedback = 0.0
-            train_file = self.config.train_split[self.config.split]
-            newSamples = self.config.filename_newSamples
-            retrain_file = self.config.filename_retrain
-            AL_file = self.config.train_split[self.config.sample_split]
+            train_file = config.train_split[config.split]
+            newSamples = config.filename_newSamples
+            retrain_file = config.filename_retrain
+            #AL_file = config.train_split[config.sample_split]
             words, tags, prob, enc, seq_len = self.feedback_helper(dev)
 
             if os.path.isfile('num_fedback.npy'):
                 num_fedback = np.load('num_fedback.npy')
-            num_fedback += AL.feedback(AL_file, newSamples, self.config.dummy_train,
+            num_fedback += AL.feedback(newSamples, config.dummy_train,
                                        words, tags, prob, enc, seq_len)
             print('\nnum_fedback : {}'.format(num_fedback))
             np.save('num_fedback.npy', num_fedback)
@@ -488,7 +415,7 @@ class NERModel(BaseModel):
 
             correct_preds, total_correct, total_preds= 0., 0., 0.
 
-            for words, labels in minibatches(test, self.config.batch_size):
+            for words, labels in minibatches(test, config.batch_size):
                 labels_pred, sequence_lengths, prob = self.predict_batch(words)
 
                 for lab, lab_pred, length in zip(labels, labels_pred,
@@ -496,9 +423,9 @@ class NERModel(BaseModel):
                     lab = lab[:length]
                     lab_pred = lab_pred[:length]
                     accs += [a == b for (a, b) in zip(lab, lab_pred)]
-                    lab_chunks = set(get_chunks(lab, self.config.vocab_tags))
+                    lab_chunks = set(get_chunks(lab, config.vocab_tags))
                     lab_pred_chunks = set(get_chunks(lab_pred,
-                                                     self.config.vocab_tags))
+                                                     config.vocab_tags))
 
                     c = lab_chunks & lab_pred_chunks
                     correct_preds += len(lab_chunks & lab_pred_chunks)
@@ -545,19 +472,27 @@ class NERModel(BaseModel):
             [], [], [], [], []
 
         for words, labels in minibatches(dev, 10):
-            labels_pred, sequence_lengths, prob = self.predict_batch(words)
+            if config.active_algo == 'bald':
+                labels_pred, sequence_lengths, prob = self.BALD_MC(words)
+            else:
+                labels_pred, sequence_lengths, prob = self.predict_batch(words)
 
             for X in range(len(prob)):
-                if prob[X] <= self.config.threshold:
+                if prob[X] <= config.threshold:
+                    fd, _ = self.get_feed_dict([words[X]], dropout=1.0)
+
+                    shape = self.sess.run([self.shape], feed_dict=fd)[0][-2]
+                    if shape < 3:
+                       continue
+
                     prob_confused += [prob[X]]
                     seq_len_confused += [sequence_lengths[X]]
-                    fd, _ = self.get_feed_dict([words[X]], dropout=1.0)
 
                     word_list = []
                     for i in range(sequence_lengths[X]):
-                        word_list += [''.join([self.config.vocab_chars_inv[char] for char in words[X][0][i]])]
+                        word_list += [''.join([config.vocab_chars_inv[char] for char in words[X][0][i]])]
                     words_confused += [word_list]
-                    tags_confused += [[self.config.vocab_tags_inv[label] for label in labels[X]]]
+                    tags_confused += [[config.vocab_tags_inv[label] for label in labels[X]]]
 
                     Enc = self.sess.run([self.encoded], feed_dict=fd)
                     enc += [np.reshape(Enc, (np.array(Enc).shape[1], np.array(Enc).shape[2])).tolist()]
@@ -573,7 +508,7 @@ class NERModel(BaseModel):
         Returns:
             preds: list of tags (string), one for each word in the sentence
         """
-        words = [self.config.processing_word(w) for w in words_raw]
+        words = [config.processing_word(w) for w in words_raw]
         if type(words[0]) == tuple:
             words = zip(*words)
         pred_ids, _, scores = self.predict_batch([words])
@@ -588,19 +523,6 @@ class NERModel(BaseModel):
         '''
         # return preds
 
-#TODO : consider the dev split as an additional train split                 : don't do this
-#TODO : add skipthoughts similarity
-#TODO : add outlier detection
-#TODO : make dense siamese twins                                            : DONE
-#TODO : add a function for plotting graphs
-#TODO : add BALD active learning strategy
-#TODO : try to replicate the AWS AL strategy                                : could not be done as they didn't share their code
+
 #TODO : should the margin based method be normalized ???
-#TODO : add POS tagging
-#TODO : add OntoNotes dataset
-#TODO : change encoding to last state of word-BiLSTM                        : DONE
-#TODO : extend to medical datasets
 #TODO : perform experiments with and without outlier detection
-#TODO : check whether proper sentences are being sample from train split    : DONE
-#TODO : perform dynamic clustering                                          : DONE
-#TODO : periodic retrain of siamese twins                                   : DONE

@@ -120,6 +120,7 @@ class Config():
     # ------------------------------------------------------------------
     hidden_size_char = 100  # lstm on chars
     hidden_size_lstm = 300  # lstm on word embeddings
+    filter_sizes = args.filter_sizes
 
     # NOTE: if both chars and crf, only 1.6x slower on GPU
     use_crf = args.use_crf  # if crf, training is 1.7x slower on CPU
@@ -129,6 +130,7 @@ class Config():
     # other parameters
     # ------------------------------------------------------------------
     active_algo = args.active_strategy
+    model = args.model
     split = args.split
     sample_split = args.sample_split
     num_retrain = args.num_retrain
@@ -139,6 +141,9 @@ class Config():
     num_clusters = args.num_clusters
     threshold = args.threshold
     periodic = args.periodic
+    sample_times = args.sample_times  # for BALD active learning strategy
+    variational_dropout = args.variational_dropout
 
     file_out = "results/files/out_" + str(40) + "query_" + active_algo
     mode = args.mode
+    excel_id = args.excel_id
