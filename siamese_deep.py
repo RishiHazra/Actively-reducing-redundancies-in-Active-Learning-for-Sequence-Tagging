@@ -12,8 +12,8 @@ class Siamese():
         # -----------------------------------------------------------
         # Placeholders for input, output and dropout
         # -----------------------------------------------------------
-        self.input_x1 = tf.placeholder(tf.float32, [None, None, config.hidden_size_lstm], name="input_x1")
-        self.input_x2 = tf.placeholder(tf.float32, [None, None, config.hidden_size_lstm], name="input_x2")
+        self.input_x1 = tf.placeholder(tf.float32, [None, None, 2*config.hidden_size_lstm], name="input_x1")
+        self.input_x2 = tf.placeholder(tf.float32, [None, None, 2*config.hidden_size_lstm], name="input_x2")
         self.seq_len1 = tf.placeholder(tf.int32, [None], name='seq_len1')
         self.seq_len2 = tf.placeholder(tf.int32, [None], name='seq_len2')
         self.input_y = tf.placeholder(tf.float32, [None], name="input_y")
