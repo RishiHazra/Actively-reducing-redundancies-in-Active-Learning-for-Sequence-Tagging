@@ -39,7 +39,7 @@ def Arguments():
                         help='excel train id')
     parser.add_argument('--variational_dropout', type=bool,
                         default=False, help='variational_dropout')
-    parser.add_argument('--model_aware', type=bool, default=False,
+    parser.add_argument('--model_aware', type=bool, default=True,
                         help='model aware or not')
     # -------------------------------------------------------------
     # fixed arguments
@@ -66,7 +66,7 @@ def Arguments():
                         help='use char encoder ?')
     parser.add_argument('--clip', type=int, default=-1,
                         help='gradient clipping')
-    parser.add_argument('--early_stop', type=int, default=14,
+    parser.add_argument('--early_stop', type=int, default=4,
                         help='stop if no improvement')
     parser.add_argument('--filter_sizes', type=list, default=[1,2,3],
                         help='char CNN filter sizes')
