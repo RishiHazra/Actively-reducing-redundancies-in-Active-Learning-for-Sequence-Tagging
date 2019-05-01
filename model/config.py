@@ -78,9 +78,9 @@ class Config():
     # ------------------------------------------------------------------
     # dataset
     # ------------------------------------------------------------------
-    filename_train = "ner/data/ner_train.txt"
+    filename_train = "ner/data/movie_train.txt"
     filename_dev = "ner/data/ner_dev.txt"
-    filename_test = "ner/data/ner_test.txt"
+    filename_test = "ner/data/movie_test.txt"
 
     train_split = [[]] * (num_splits + 1)
     for i in range(1, num_splits + 1):
@@ -143,6 +143,7 @@ class Config():
     periodic = args.periodic
     sample_times = args.sample_times  # for BALD active learning strategy
     variational_dropout = args.variational_dropout
+    model_aware = args.model_aware
 
     file_out = "results/files/out_" + str(40) + "query_" + active_algo
     mode = args.mode

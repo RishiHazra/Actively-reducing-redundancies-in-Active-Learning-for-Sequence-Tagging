@@ -50,7 +50,6 @@ class NERModel(BaseModel):
         self.word_ids = tf.placeholder(tf.int32, shape=[None, None],
                                        name="word_ids")
 
-        # shape = (batch size)
         self.sequence_lengths = tf.placeholder(tf.int32, shape=[None],
                                                name="sequence_lengths")
 
@@ -71,6 +70,8 @@ class NERModel(BaseModel):
                                       name="dropout")
         self.lr = tf.placeholder(dtype=tf.float32, shape=[],
                                  name="lr")
+        self.flair_input = tf.placeholder(tf.float32, shape=[None, None, 2348],
+                                          name='flair_input')
 
 
     def get_feed_dict(self, words, labels=None, lr=None, dropout=None):
@@ -155,6 +156,7 @@ class NERModel(BaseModel):
         self.add_logits_op = obj.add_logits_op()
         self.shape = obj.shape
         self.encoded = obj.encoded
+        self.model_unaware_embedding = obj.model_unaware_embedding
         self.logits = obj.logits
         self.add_pred_op()
         self.add_loss_op()
@@ -184,10 +186,17 @@ class NERModel(BaseModel):
         i = 0    
         for words, labels in minibatches(sick, 2):
             fd, _ = self.get_feed_dict(words, dropout=1.0)
-            enc = self.sess.run([self.encoded], feed_dict=fd)
-            enc = np.reshape(enc,(np.array(enc).shape[1],np.array(enc).shape[2]))
-            sent1 = np.array_split(enc,2)[0]
-            sent2 = np.array_split(enc,2)[1]
+            if config.model_aware:
+                #print('\nModel Aware\n')
+                enc = self.sess.run([self.encoded], feed_dict=fd)
+                enc = np.reshape(enc, (np.array(enc).shape[1], np.array(enc).shape[2]))
+                sent1 = np.array_split(enc, 2)[0]
+                sent2 = np.array_split(enc, 2)[1]
+            else:
+                #print('\nModel Unaware\n')
+                enc = self.sess.run([self.model_unaware_embedding], feed_dict=fd)
+                sent1 = enc[0][0]
+                sent2 = enc[0][1]
             i += 1
             np.savez(path + str(i),
                     sent_1 = sent1,
@@ -494,8 +503,15 @@ class NERModel(BaseModel):
                     words_confused += [word_list]
                     tags_confused += [[config.vocab_tags_inv[label] for label in labels[X]]]
 
-                    Enc = self.sess.run([self.encoded], feed_dict=fd)
-                    enc += [np.reshape(Enc, (np.array(Enc).shape[1], np.array(Enc).shape[2])).tolist()]
+                    if config.model_aware:
+                        # print('\nModel Aware\n')
+                        Enc = self.sess.run([self.encoded], feed_dict=fd)
+                        enc += [np.reshape(Enc, (np.array(Enc).shape[1], np.array(Enc).shape[2])).tolist()]
+                        #sent1 = np.array_split(enc, 2)[0]
+                        #sent2 = np.array_split(enc, 2)[1]
+                    else:
+                        # print('\nModel Unaware\n')
+                        enc += [self.sess.run([self.model_unaware_embedding], feed_dict=fd)]
 
         print('\n {} low confidence sentences extracted ... \n '.format(len(seq_len_confused)))
         return words_confused, tags_confused, prob_confused, enc, seq_len_confused
@@ -522,7 +538,3 @@ class NERModel(BaseModel):
         print(scores,'\n')
         '''
         # return preds
-
-
-#TODO : should the margin based method be normalized ???
-#TODO : perform experiments with and without outlier detection

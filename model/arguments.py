@@ -5,40 +5,42 @@ def Arguments():
     # -------------------------------------------------------------
     # dynamic arguments
     # -------------------------------------------------------------
-    parser.add_argument('--nepochs', type=int, default=15,
+    parser.add_argument('--nepochs', type=int, default=65,
                         help='number of epochs of training/retraining')
-    parser.add_argument('--mode', type=str, default='feedback',
+    parser.add_argument('--mode', type=str, default='train',
                         help='train, retrain, feedback')
-    parser.add_argument('--split', type=int, default=29,
+    parser.add_argument('--split', type=int, default=0,
                         help='split to train on')
-    parser.add_argument('--sample_split', type=int, default=3,
+    parser.add_argument('--sample_split', type=int, default=2,
                         help='split to feedback/sample from')
     parser.add_argument('--num_retrain', type=int, default=1,
                         help='number of retrains so far')
     parser.add_argument('--sample_train', type=int, default=150,
                         help='number of train samples for each retrain step')
-    parser.add_argument('--active_strategy', type=str, default='entropy',
+    parser.add_argument('--active_strategy', type=str, default='margin',
                         help='active learning strategy')
     parser.add_argument('--nclusters', type=int, default=20,
                         help='number of clusters')
-    parser.add_argument('--similarity', type=str, default='cosine',
+    parser.add_argument('--similarity', type=str, default='siamese',
                         help='cosine/siamese/skipthoughts')
     parser.add_argument('--encode', type=bool, default=False,
                         help='Encode SICK dataset using NER model')
     parser.add_argument('--num_clusters', type=int, default=10,
                         help='Number of clusters for 2nd layer of AL')
-    parser.add_argument('--threshold', type=float, default=35,
+    parser.add_argument('--threshold', type=float, default=15,
                         help='confusion based threshold')
     parser.add_argument('--periodic', type=bool, default=False,
                         help='periodically train the model completely')
     parser.add_argument('--sample_times', type=int, default=51,
-                        help='Number of forward passes for BALD AL')
+                        help='Number of forward passes for BALD ALS')
     parser.add_argument('--model', type=str, default="CNN BILSTM CRF",
                         help='model used for active learning')
     parser.add_argument('--excel_id', type=int, default=1,
                         help='excel train id')
     parser.add_argument('--variational_dropout', type=bool,
                         default=False, help='variational_dropout')
+    parser.add_argument('--model_aware', type=bool, default=False,
+                        help='model aware or not')
     # -------------------------------------------------------------
     # fixed arguments
     # -------------------------------------------------------------
@@ -64,7 +66,7 @@ def Arguments():
                         help='use char encoder ?')
     parser.add_argument('--clip', type=int, default=-1,
                         help='gradient clipping')
-    parser.add_argument('--early_stop', type=int, default=4,
+    parser.add_argument('--early_stop', type=int, default=14,
                         help='stop if no improvement')
     parser.add_argument('--filter_sizes', type=list, default=[1,2,3],
                         help='char CNN filter sizes')

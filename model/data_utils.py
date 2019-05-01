@@ -363,8 +363,8 @@ def get_chunks(seq, tags):
         tags = {"B-PER": 4, "I-PER": 5, "B-LOC": 3}
         result = [("PER", 0, 2), ("LOC", 3, 4)]
     """
-    default = tags[NONE]  #for POS tagging : comment out this line
-    #default = None     #for POS tagging : uncomment this line
+    default = tags[NONE]
+    #default = None
     idx_to_tag = {idx: tag for tag, idx in tags.items()}
     chunks = []
     chunk_type, chunk_start = None, None

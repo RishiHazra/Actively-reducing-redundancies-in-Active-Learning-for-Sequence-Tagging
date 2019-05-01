@@ -44,6 +44,7 @@ class CNN_BILSTM_CRF():
 
             word_embeddings = tf.nn.embedding_lookup(_word_embeddings,
                                                      self.word_ids, name="word_embeddings")
+        self.model_unaware_embedding = tf.identity(word_embeddings)
 
         pooled_outputs = []
         for i, filter_size in enumerate(self.config.filter_sizes):
@@ -115,13 +116,13 @@ class CNN_BILSTM_CRF():
                                                         state_keep_prob=self.config.dropout,
                                                         dtype=tf.float32,
                                                         variational_recurrent=True,
-                                                        input_size=600)
+                                                        input_size=2648)
                 cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=self.config.dropout,
                                                         output_keep_prob=self.config.dropout,
                                                         state_keep_prob=self.config.dropout,
                                                         dtype=tf.float32,
                                                         variational_recurrent=True,
-                                                        input_size=600)
+                                                        input_size=2648)
 
             (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(
                 cell_fw, cell_bw, self.word_embeddings,
