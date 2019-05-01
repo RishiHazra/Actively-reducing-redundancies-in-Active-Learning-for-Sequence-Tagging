@@ -18,7 +18,7 @@ from siamese_dataloader import Dataset
 # Please don't alter !!!)
 #-------------------------------------------------------------------
 parser = ap.ArgumentParser()
-parser.add_argument('--embedding_dim', type=int, default=300,
+parser.add_argument('--embedding_dim', type=int, default=600,
                     help='Dimension of NER model encoded embedding')
 parser.add_argument('--dropout_keep_prob', type=int, default=1.0,
                     help='Dropout keep probability')
