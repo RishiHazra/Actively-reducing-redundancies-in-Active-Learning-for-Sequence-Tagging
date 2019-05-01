@@ -18,7 +18,7 @@ from siamese_dataloader import Dataset
 # Please don't alter !!!)
 #-------------------------------------------------------------------
 parser = ap.ArgumentParser()
-parser.add_argument('--embedding_dim', type=int, default=600,
+parser.add_argument('--embedding_dim', type=int, default=300,
                     help='Dimension of NER model encoded embedding')
 parser.add_argument('--dropout_keep_prob', type=int, default=1.0,
                     help='Dropout keep probability')
@@ -30,7 +30,7 @@ parser.add_argument('--batch_size', type=int, default=48,
                     help='Batch Size')
 parser.add_argument('--val_batch', type=int, default=48,
                     help='Validation batch size')
-parser.add_argument('--num_epochs', type=int, default=31,
+parser.add_argument('--num_epochs', type=int, default=41,
                     help='Number of training epochs')
 parser.add_argument('--evaluate_every', type=int, default=2,
                     help='Evaluate model on dev set after this many steps')

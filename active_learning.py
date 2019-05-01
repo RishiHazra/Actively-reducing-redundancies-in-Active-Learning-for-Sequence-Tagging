@@ -14,8 +14,8 @@ config = Config()
 #--------------------------------------------------------------------------
 # follow instructions from : https://github.com/ryankiros/skip-thoughts
 #--------------------------------------------------------------------------
-sys.path.append('../Skip Thoughts')
-import skipthoughts
+#sys.path.append('../Skip Thoughts')
+#import skipthoughts
 
 
 class Siamese_Model():
@@ -143,23 +143,26 @@ class Active_Learning():
         newSamples : writing the most representative samples
                     to a different file for re-trainings.
         '''
-        print('\nClustering to find similarity \n')
-        clusters= self.cluster_sentences(enc, seq_len, words_conf)
+        if config.similarity == 'None':
+            index = np.arange(len(prob))
+        else:
+            print('\nClustering to find similarity \n')
+            clusters= self.cluster_sentences(enc, seq_len, words_conf)
 
-        most_representative_index = []
-        for cluster in range(config.nclusters):
-            clust = clusters[cluster]
+            most_representative_index = []
+            for cluster in range(config.nclusters):
+                clust = clusters[cluster]
 
-            # ----------------------------------------------------------------
-            # Select the top two lowest confidence sentences from each cluster.
+                # ----------------------------------------------------------------
+                # Select the top two lowest confidence sentences from each cluster.
 
-            # The clusters which have lesser than a fixed number of samples are
-            # considered as outliers and dropped.
-            #-----------------------------------------------------------------
-            most_representative_index += \
-                [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:1]
+                # The clusters which have lesser than a fixed number of samples are
+                # considered as outliers and dropped.
+                #-----------------------------------------------------------------
+                most_representative_index += \
+                    [x for _,x in sorted(zip(list(map(lambda x:prob[x],clust)),clust))][:2]
+            index = sorted(most_representative_index)
 
-        index = sorted(most_representative_index )
         with open(newSamples, 'a') as handle1, \
             open(dummy_train, 'a') as handle2:
             for words, tags in zip(np.array(words_conf)[index], np.array(tags_conf)[index]):
@@ -181,7 +184,7 @@ class Active_Learning():
 
         retrain_file : all mixed samples are written to the retrain file
         '''
-        split_size = math.ceil(14986 / config.num_splits) # train_size = 14986
+        split_size = math.ceil(7816 / config.num_splits) # train_size = 14986
 
         #--------------------------------------------------------------------------------------
         # keeping a fixed proportion of samples from both train file and low confidence samples
@@ -250,9 +253,13 @@ class Active_Learning():
             max_len = max(seq_len)
             seq_len1, seq_len2 = \
                 [seq_len[i] for i in split1], [seq_len[i] for i in split2]
-            sent1, sent2 = [enc[i] for i in split1], [enc[i] for i in split2]
 
-            if config.model.split()[1] == 'LSTM':
+            if not config.model_aware:
+                sent1, sent2 = [np.array(enc[i][0][0]).tolist() for i in split1], [np.array(enc[i][0][0]).tolist() for i in split2]
+            else:
+                sent1, sent2 = [enc[i] for i in split1], [enc[i] for i in split2]
+
+            if config.model.split()[1] == 'LSTM' or not config.model_aware:
                 dim = config.hidden_size_lstm
             else:
                 dim = 2 * config.hidden_size_lstm
@@ -281,16 +288,16 @@ class Active_Learning():
 
         elif config.similarity == 'cosine':
             enc1 = [emb[-1] for emb in enc]
-            X = cos_sim(enc1, enc1)
-            X[X<0] = 0
+            X = np.exp(cos_sim(enc1, enc1))
             clustering = self.spectral_clustering(X, n_clusters)
 
         elif config.similarity == 'skipthoughts':
             model = skipthoughts.load_model()
             encoder = skipthoughts.Encoder(model)
             vectors = encoder.encode([' '.join(list) for list in words_conf])
-            vectors = vectors / np.linalg.norm(vectors)
-            X = np.cos(np.matmul(vectors, np.transpose(vectors)))
+            X = np.exp(cos_sim(vectors, vectors))
+            #vectors = vectors / np.linalg.norm(vectors)
+            #X = np.cos(np.dot(vectors, np.transpose(vectors)))
             clustering = self.spectral_clustering(X, n_clusters)
 
         return clustering
