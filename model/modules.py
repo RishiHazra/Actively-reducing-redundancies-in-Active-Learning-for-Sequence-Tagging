@@ -330,7 +330,8 @@ class LSTM_LSTM_CRF():
 
             word_embeddings = tf.nn.embedding_lookup(_word_embeddings,
                                                      self.word_ids, name="word_embeddings")
-
+        self.model_unaware_embedding = tf.identity(word_embeddings)
+        
         with tf.variable_scope("chars"):
             if self.config.use_chars:
                 # get char embeddings matrix
