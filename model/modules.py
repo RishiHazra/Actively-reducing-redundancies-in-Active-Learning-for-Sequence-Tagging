@@ -45,54 +45,51 @@ class CNN_BILSTM_CRF():
             word_embeddings = tf.nn.embedding_lookup(_word_embeddings,
                                                      self.word_ids, name="word_embeddings")
         self.model_unaware_embedding = tf.identity(word_embeddings)
-        
-        if self.config.use_chars:
-            pooled_outputs = []
-            for i, filter_size in enumerate(self.config.filter_sizes):
-                with tf.variable_scope("char_CNN" + str(i)):
 
-                        _char_embeddings = tf.get_variable(
-                            name="_char_embeddings",
-                            dtype=tf.float32,
-                            shape=[self.config.nchars, self.config.dim_char])
+        pooled_outputs = []
+        for i, filter_size in enumerate(self.config.filter_sizes):
+            with tf.variable_scope("char_CNN" + str(i)):
+                if self.config.use_chars:
+                    _char_embeddings = tf.get_variable(
+                        name="_char_embeddings",
+                        dtype=tf.float32,
+                        shape=[self.config.nchars, self.config.dim_char])
 
-                        # [shape = (batch, sentence, word, dim of char emb)]
-                        char_embeddings = tf.nn.embedding_lookup(_char_embeddings,
-                                                                 self.char_ids, name="char_embeddings")
+                    # [shape = (batch, sentence, word, dim of char emb)]
+                    char_embeddings = tf.nn.embedding_lookup(_char_embeddings,
+                                                             self.char_ids, name="char_embeddings")
 
-                        # put the time dimension on axis=1
-                        s = tf.shape(char_embeddings)
-                        self.shape = s
-                        char_embeddings = tf.reshape(char_embeddings,
-                                                     shape=[s[0] * s[1], s[-2], self.config.dim_char, 1])
+                    # put the time dimension on axis=1
+                    s = tf.shape(char_embeddings)
+                    self.shape = s
+                    char_embeddings = tf.reshape(char_embeddings,
+                                                 shape=[s[0] * s[1], s[-2], self.config.dim_char, 1])
 
-                        conv_weight = tf.get_variable(
-                            shape=[filter_size, self.config.dim_char, 1, self.config.hidden_size_char],
-                            initializer=tf.truncated_normal_initializer(stddev=0.01),
-                            name='conv_weights'
-                        )
-                        conv_bias = tf.get_variable(
-                            shape=[self.config.hidden_size_char],
-                            initializer=tf.zeros_initializer(),
-                            name='conv_bias'
-                        )
+                    conv_weight = tf.get_variable(
+                        shape=[filter_size, self.config.dim_char, 1, self.config.hidden_size_char],
+                        initializer=tf.truncated_normal_initializer(stddev=0.01),
+                        name='conv_weights'
+                    )
+                    conv_bias = tf.get_variable(
+                        shape=[self.config.hidden_size_char],
+                        initializer=tf.zeros_initializer(),
+                        name='conv_bias'
+                    )
 
-                        # shape = [batch*sent_len, out_height, out_width, 2*self.config.dim_char]
-                        conv = tf.nn.conv2d(char_embeddings, conv_weight, strides=[1, 1, 1, 1], padding='VALID')
-                        conv = tf.nn.relu(tf.nn.bias_add(conv, conv_bias))
-                        pooled = gen_nn_ops.max_pool_v2(conv,
-                                                        ksize=[1, s[-2] - filter_size + 1, 1, 1],
-                                                        strides=[1, 1, 1, 1],
-                                                        padding='VALID')
+                    # shape = [batch*sent_len, out_height, out_width, 2*self.config.dim_char]
+                    conv = tf.nn.conv2d(char_embeddings, conv_weight, strides=[1, 1, 1, 1], padding='VALID')
+                    conv = tf.nn.relu(tf.nn.bias_add(conv, conv_bias))
+                    pooled = gen_nn_ops.max_pool_v2(conv,
+                                                    ksize=[1, s[-2] - filter_size + 1, 1, 1],
+                                                    strides=[1, 1, 1, 1],
+                                                    padding='VALID')
 
-                        conv = tf.reshape(pooled, shape=[s[0], s[1], self.config.hidden_size_char])
-                        conv = tf.nn.dropout(conv, self.dropout)
-                        pooled_outputs.append(conv)
-                conv = tf.concat([op for op in pooled_outputs], axis=-1)
+                    conv = tf.reshape(pooled, shape=[s[0], s[1], self.config.hidden_size_char])
+                    conv = tf.nn.dropout(conv, self.dropout)
+                    pooled_outputs.append(conv)
+            conv = tf.concat([op for op in pooled_outputs], axis=-1)
 
-            self.word_embeddings = tf.concat([word_embeddings, conv], axis=-1)
-        else:
-            self.word_embeddings = word_embeddings
+        self.word_embeddings = tf.concat([word_embeddings, conv], axis=-1)
         # self.word_embeddings = tf.nn.dropout(word_embeddings, self.dropout)
 
 
