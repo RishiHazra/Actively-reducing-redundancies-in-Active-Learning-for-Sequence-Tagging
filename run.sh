@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-declare -a arr=("siamese" "cosine" "skipthoughts")
+declare -a arr=("siamese" "cosine" "skipthoughts" "None")
 
 for sim in "${arr[@]}"
 do  
