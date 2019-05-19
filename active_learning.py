@@ -184,7 +184,7 @@ class Active_Learning():
 
         retrain_file : all mixed samples are written to the retrain file
         '''
-        split_size = math.ceil(7816 / config.num_splits) # train_size = 14986
+        split_size = math.ceil(14986 / config.num_splits) # train_size = 14986
 
         #--------------------------------------------------------------------------------------
         # keeping a fixed proportion of samples from both train file and low confidence samples
