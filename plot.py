@@ -219,8 +219,8 @@ CoNLL 2003 (NER) Margin
 
 
 
-plt.rcParams['font.size'] = 15
-plt.figure(figsize=(8,8))
+plt.rcParams['font.size'] = 25
+plt.figure(figsize=(10,10))
 #plt.plot(t, p, 'r--', t, r, 'b--', t, f1, 'g--', marker='o',linewidth=2, markersize=12)
 
 import math
@@ -266,7 +266,7 @@ plt.plot(t, random, ',y-.', label='Random')
 
 plt.legend()
 #plt.legend(handles=[green_patch, red_patch,blue_patch,black_patch,magenta_patch])
-plt.title('Dataset: CoNLL 2003 (NER), Model: BiLSTM_BiLSTM_CRF, ALS: BALD', fontsize=14)
+plt.title('Dataset: CoNLL 2003 (NER), Model: BiLSTM_BiLSTM_CRF, ALS: BALD', fontsize=25)
 plt.xlabel('Percentage of data')
 plt.ylabel('F-score')
 plt.savefig('Dataset: CoNLL 2003 (NER), Model: BiLSTM_BiLSTM_CRF, ALS: BALD.png')
