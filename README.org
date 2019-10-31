@@ -1,4 +1,4 @@
-* Actively-reducing-redundancies-in-Active-Learning-for-Sequence-Tagging
+# Actively-reducing-redundancies-in-Active-Learning-for-Sequence-Tagging
 Implementation of [[https://papers.nips.cc/paper/7213-poincare-embeddings-for-learning-hierarchical-representations][Poincaré Embeddings for Learning Hierarchical Representations]] using distributed frameworks such as TensorFlow, PyTorch and HOROVOD.
 
 [[file:pytorch/plots/mammal_closure.tsv_poincare_dim2_e1000.png]]
