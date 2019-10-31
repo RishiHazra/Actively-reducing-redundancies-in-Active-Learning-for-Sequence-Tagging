@@ -15,7 +15,7 @@ git clone https://github.com/RishiHazra/Actively-reducing-redundancies-in-Active
 - nltk
 - gensim (for GENIA dataset)
 
-To run the code
+** To run the code
 #+BEGIN_SRC sh
 vi run.sh  (set the desired model , data split, npeochs)
 ./run.sh
