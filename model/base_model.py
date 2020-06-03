@@ -103,10 +103,6 @@ class BaseModel(object):
         nepoch_no_imprv = 0 # for early stopping
         self.add_summary() # tensorboard
 
-        worksheetName = self.config.active_algo + '_' + \
-                                 self.config.similarity + '_' + 'split_' + \
-                                    str(self.config.split)
-
         for epoch in range(self.config.nepochs):
             self.logger.info("Epoch {:} out of {:}".format(epoch + 1,
                         self.config.nepochs))
