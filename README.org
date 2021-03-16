@@ -1,4 +1,4 @@
-* Actively-reducing-redundancies-in-Active-Learning-for-Sequence-Tagging
+* Active$^2$ Learning: Actively-reducing-redundancies-in-Active-Learning-for-Sequence-Tagging
 
 ** Installation
 Simply clone this repository via
