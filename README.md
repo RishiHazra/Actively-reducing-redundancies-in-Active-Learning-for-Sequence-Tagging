@@ -3,7 +3,7 @@
 ## Installation
 Simply clone this repository via
 ```
-git clone https://github.com/RishiHazra/Actively-reducing-redundancies-in-Active-Learning-for-Sequence-Tagging.git
+$ git clone https://github.com/RishiHazra/Actively-reducing-redundancies-in-Active-Learning-for-Sequence-Tagging.git
 ```
 
 ## Dependencies
@@ -16,8 +16,8 @@ git clone https://github.com/RishiHazra/Actively-reducing-redundancies-in-Active
 
 ## To run the code
 ```
-vi run.sh  (set the desired model , data split, npeochs)
-./run.sh
+$ vi run.sh  (set the desired model , data split, npeochs)
+$ ./run.sh
 ```
 
 ## Publication
