@@ -21,4 +21,4 @@ $ ./run.sh
 ```
 
 ## Publication
-* Rishi Hazra, Parag Dutta, Shubham Gupta, Mohammed Abdul Qaathir, Ambedkar Dukkipati, NAACL 2021. [Active^2 Learning: Actively reducing redundancies in Active Learning methods for Sequence Tagging and Machine Translation](https://arxiv.org/pdf/1911.00234.pdf)
+* Rishi Hazra, Parag Dutta, Shubham Gupta, Mohammed Abdul Qaathir, Ambedkar Dukkipati, In **NAACL 2021**. [Active^2 Learning: Actively reducing redundancies in Active Learning methods for Sequence Tagging and Machine Translation](https://arxiv.org/pdf/1911.00234.pdf)
